@@ -61,9 +61,9 @@ function pref_model₂(angle::AbstractFloat, duration::AbstractFloat, noise::Int
     return σ(0.5 * (angle - 50.0)) * σ(0.5 * (duration - 20.0)) * σ(-(noise + 99))
 end
 
-"Prefers high angles, short durations, and low noise"
+"Prefers low to high angles, short to long durations, and high to low noise"
 function pref_model₃(angle::AbstractFloat, duration::AbstractFloat, noise::Integer)
-    return σ(0.5 * (angle - 70.0)) * σ(-0.5 * (duration - 20.0)) * σ(-(noise + 102))
+    return σ(0.5 * (angle - 30.0)) * σ(0.5 * (duration - 10.0)) * σ(-(noise + 96))
 end
 
 "Represents an agent with a given preference model and current estimate of each state's value"
@@ -74,15 +74,18 @@ end
 
 const STATE_SIZE = 5, 5, 5
 
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 "Runs simulations for n epochs on a collection of transmitters with discount factor λ"
 function simulate!(transmitters::AbstractVector{VirtualTransmitter}, n_epochs=1000, λ=0.9)
-    @info "Beginning simulation!"
 
     # use 100 satellite passes in 48 hours, which is roughly accurate to real life
     n_passes = 100
 
     # for storing tx success/failure results over the epochs
+    # and time take to transmit
     results = zeros(length(transmitters), n_epochs)
+    times_to_tx = zeros(length(transmitters), n_epochs)
 
     @withprogress for (i, txᵢ) ∈ enumerate(transmitters)
         # record how many times each state was visited
@@ -109,7 +112,9 @@ function simulate!(transmitters::AbstractVector{VirtualTransmitter}, n_epochs=10
             # simulate tx for the selected pass
             tx_result = (rand() < txᵢ.pref_model(s̄[selected_pass]...)) * 1.0
 
+            # record result and time to tx
             results[i, epochᵢ] = tx_result
+            times_to_tx[i, epochᵢ] = t̄[selected_pass]
 
             # update estimates
             if epochᵢ != n_epochs
@@ -118,7 +123,7 @@ function simulate!(transmitters::AbstractVector{VirtualTransmitter}, n_epochs=10
                 
                 # except for the one pass selected
                 vₙ = txᵢ.value_estimates[discretized_s..., epochᵢ] # current estimate
-                vₙ₊₁ = vₙ + (1 / (s_counts[discretized_s...] + 1)) * (tx_result - vₙ) # new estimate
+                vₙ₊₁ = vₙ + (1 / (s_counts[discretized_s...])) * (tx_result - vₙ) # new estimate
                 txᵢ.value_estimates[discretized_s..., epochᵢ + 1] = vₙ₊₁
             end
         end
@@ -126,12 +131,11 @@ function simulate!(transmitters::AbstractVector{VirtualTransmitter}, n_epochs=10
         @logprogress i / length(transmitters)
     end
 
-    return results
+    return results, times_to_tx
 end
 
 "Runs non-learning simulations for n epochs on a collection of transmitters"
 function baseline(transmitters::AbstractVector{VirtualTransmitter}, n_epochs=1000)
-    @info "Beginning simulation!"
 
     # use 100 satellite passes in 48 hours, which is roughly accurate to real life
     n_passes = 100
@@ -160,33 +164,66 @@ function baseline(transmitters::AbstractVector{VirtualTransmitter}, n_epochs=100
     return results
 end
 
-# construct 100 virtual transmitters with the first preference model
+"Run simulations for a set of virtual transmitters for several values of discount factors, then plots out moving average and average time to TX"
+function plot_sim_results(transmitters::AbstractVector{VirtualTransmitter}, n_epochs=10000, λs=[0.9,0.95,0.99])
+    # TODO
+    n_tx = length(transmitters)
+
+    baseline_results = baseline(transmitters, n_epochs)
+    
+    # size of the moving window for moving averages
+    window_size = 1000
+
+    # create success rate plot
+    results_plt = hline([baseline_results |> mean], label="baseline")
+    title!(results_plt, "Moving Average TX Success Rate (window = $(window_size))")
+    xlabel!(results_plt, "Epoch")
+    ylabel!(results_plt, "TX Success Rate")
+
+    # create average time to tx plot
+    time_to_tx_plt = plot()
+    title!(time_to_tx_plt, "Moving Average Time to TX (window = $(window_size))")
+    xlabel!(time_to_tx_plt, "Epoch")
+    ylabel!(time_to_tx_plt, "Averge Time to TX (hours)")
+
+    for λᵢ ∈ λs
+        sim_results, times_to_tx = simulate!(transmitters, n_epochs, λᵢ)
+        
+        results_moving_avgs = zeros(n_epochs)
+        for i ∈ 1:n_epochs
+            if i <= window_size
+                results_moving_avgs[i] = sim_results[:, 1:i] |> mean
+            else
+                results_moving_avgs[i] = sim_results[:, (i-window_size):i] |> mean
+            end
+        end
+
+        times_moving_avgs = zeros(n_epochs)
+        for i ∈ 1:n_epochs
+            if i <= window_size
+                times_moving_avgs[i] = times_to_tx[:, 1:i] |> mean
+            else
+                times_moving_avgs[i] = times_to_tx[:, (i-window_size):i] |> mean
+            end
+        end
+
+        plot!(results_plt, results_moving_avgs, label="λ = $(λᵢ)")
+        plot!(time_to_tx_plt, times_moving_avgs, label="λ = $(λᵢ)")
+    end
+
+    return plot(results_plt, time_to_tx_plt, layout = (2, 1))
+end
+
+# construct and simulate 100 virtual transmitters for each preference model
 # optimistic initialization (i.e., the value function approximator begins as all ones)
 transmitters₁ = [VirtualTransmitter(pref_model₁, ones(STATE_SIZE..., 10000)) for i ∈ 1:100];
-
-results₁ = simulate!(transmitters₁, 10000, 0.99)
-baseline_results₁ = baseline(transmitters₁, 10000)
-
-results₁ |> mean
-results₁[:,1:1000] |> mean
-results₁[:,9000:10000] |> mean
-
-baseline_results₁ |> mean
-baseline_results₁[:,1:1000] |> mean
-baseline_results₁[:,9000:10000] |> mean
-
-transmitters₁[1].value_estimates[:,:,:,10000]
+plt₁ = plot_sim_results(transmitters₁)
+savefig(plt₁, "pref_model1.png")
 
 transmitters₂ = [VirtualTransmitter(pref_model₂, ones(STATE_SIZE..., 10000)) for i ∈ 1:100];
-results₂ = simulate!(transmitters₂, 10000, 0.99)
-baseline_results₂ = baseline(transmitters₂, 10000)
+plt₂ = plot_sim_results(transmitters₂)
+savefig(plt₂, "pref_model2.png")
 
-results₂ |> mean
-results₂[:,1:1000] |> mean
-results₂[:,9000:10000] |> mean
-
-baseline_results₂ |> mean
-baseline_results₂[:,1:1000] |> mean
-baseline_results₂[:,9000:10000] |> mean
-
-transmitters₂[1].value_estimates[:,:,:,10000]
+transmitters₃ = [VirtualTransmitter(pref_model₃, ones(STATE_SIZE..., 10000)) for i ∈ 1:100];
+plt₃ = plot_sim_results(transmitters₃)
+savefig(plt₃, "pref_model3.png")
