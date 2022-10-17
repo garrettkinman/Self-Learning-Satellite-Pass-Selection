@@ -77,7 +77,7 @@ const STATE_SIZE = 5, 5, 5
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 "Runs simulations for n epochs on a collection of transmitters with discount factor λ"
-function simulate!(transmitters::AbstractVector{VirtualTransmitter}, n_epochs=1000, λ=0.9)
+function simulate!(transmitters::AbstractVector{VirtualTransmitter}; n_epochs=1000, λ=0.9, noise_mode="CONSTANT")
 
     # use 100 satellite passes in 48 hours, which is roughly accurate to real life
     n_passes = 100
@@ -92,9 +92,16 @@ function simulate!(transmitters::AbstractVector{VirtualTransmitter}, n_epochs=10
         s_counts = zeros(STATE_SIZE)
 
         for epochᵢ ∈ 1:n_epochs
-            # TODO: choose just one value for noise each epoch?
-            # s̄ = [((75 * rand()) + 15, (50 * rand()) + 10, rand(-107:-93)) for j ∈ 1:n_passes]
-            s̄ = [((75 * rand()) + 15, (50 * rand()) + 10, -106) for j ∈ 1:n_passes]
+
+            s̄ = []
+            if noise_mode == "CONSTANT" # simulate using just one constant value for noise
+                s̄ = [((75 * rand()) + 15, (50 * rand()) + 10, -106) for j ∈ 1:n_passes]
+            elseif noise_mode == "BUCKET" # simulate using random values from just one bucket
+                s̄ = [((75 * rand()) + 15, (50 * rand()) + 10, rand(-107:-105)) for j ∈ 1:n_passes]
+            elseif noise_mode == "RANDOM" # simulate using random values from all buckets
+                s̄ = [((75 * rand()) + 15, (50 * rand()) + 10, rand(-107:-93)) for j ∈ 1:n_passes]
+            end
+            
             t̄ = rand(n_passes) .* 48
             v̄ = [txᵢ.value_estimates[discretize(sᵢ...)..., epochᵢ] for sᵢ ∈ s̄] # corresponding value estimates for each discretized pass
 
@@ -135,7 +142,7 @@ function simulate!(transmitters::AbstractVector{VirtualTransmitter}, n_epochs=10
 end
 
 "Runs non-learning simulations for n epochs on a collection of transmitters"
-function baseline(transmitters::AbstractVector{VirtualTransmitter}, n_epochs=1000)
+function baseline(transmitters::AbstractVector{VirtualTransmitter}; n_epochs=1000, noise_mode="CONSTANT")
 
     # use 100 satellite passes in 48 hours, which is roughly accurate to real life
     n_passes = 100
@@ -145,9 +152,15 @@ function baseline(transmitters::AbstractVector{VirtualTransmitter}, n_epochs=100
 
     @withprogress for (i, txᵢ) ∈ enumerate(transmitters)
         for epochᵢ ∈ 1:n_epochs
-            # TODO: choose just one value for noise each epoch?
-            # s̄ = [((75 * rand()) + 15, (50 * rand()) + 10, rand(-107:-93)) for j ∈ 1:n_passes]
-            s̄ = [((75 * rand()) + 15, (50 * rand()) + 10, -106) for j ∈ 1:n_passes]
+            
+            s̄ = []
+            if noise_mode == "CONSTANT" # simulate using just one constant value for noise
+                s̄ = [((75 * rand()) + 15, (50 * rand()) + 10, -106) for j ∈ 1:n_passes]
+            elseif noise_mode == "BUCKET" # simulate using random values from just one bucket
+                s̄ = [((75 * rand()) + 15, (50 * rand()) + 10, rand(-107:-105)) for j ∈ 1:n_passes]
+            elseif noise_mode == "RANDOM" # simulate using random values from all buckets
+                s̄ = [((75 * rand()) + 15, (50 * rand()) + 10, rand(-107:-93)) for j ∈ 1:n_passes]
+            end
 
             # randomly select a pass, weighted evenly
             selected_pass = rand(1:n_passes)
@@ -165,11 +178,11 @@ function baseline(transmitters::AbstractVector{VirtualTransmitter}, n_epochs=100
 end
 
 "Run simulations for a set of virtual transmitters for several values of discount factors, then plots out moving average and average time to TX"
-function plot_sim_results(transmitters::AbstractVector{VirtualTransmitter}, n_epochs=10000, λs=[0.9,0.95,0.99])
+function plot_sim_results(transmitters::AbstractVector{VirtualTransmitter}; n_epochs=5000, λs=[0.9,0.95,0.99], noise_mode="BUCKET")
     # TODO
     n_tx = length(transmitters)
 
-    baseline_results = baseline(transmitters, n_epochs)
+    baseline_results = baseline(transmitters, n_epochs=n_epochs, noise_mode=noise_mode)
     
     # size of the moving window for moving averages
     window_size = 1000
@@ -184,25 +197,19 @@ function plot_sim_results(transmitters::AbstractVector{VirtualTransmitter}, n_ep
     time_to_tx_plt = plot()
     title!(time_to_tx_plt, "Moving Average Time to TX (window = $(window_size))")
     xlabel!(time_to_tx_plt, "Epoch")
-    ylabel!(time_to_tx_plt, "Averge Time to TX (hours)")
+    ylabel!(time_to_tx_plt, "Mean Time to TX (hours)")
 
     for λᵢ ∈ λs
-        sim_results, times_to_tx = simulate!(transmitters, n_epochs, λᵢ)
+        sim_results, times_to_tx = simulate!(transmitters, n_epochs=n_epochs, λ=λᵢ, noise_mode=noise_mode)
         
         results_moving_avgs = zeros(n_epochs)
-        for i ∈ 1:n_epochs
-            if i <= window_size
-                results_moving_avgs[i] = sim_results[:, 1:i] |> mean
-            else
-                results_moving_avgs[i] = sim_results[:, (i-window_size):i] |> mean
-            end
-        end
-
         times_moving_avgs = zeros(n_epochs)
         for i ∈ 1:n_epochs
             if i <= window_size
+                results_moving_avgs[i] = sim_results[:, 1:i] |> mean
                 times_moving_avgs[i] = times_to_tx[:, 1:i] |> mean
             else
+                results_moving_avgs[i] = sim_results[:, (i-window_size):i] |> mean
                 times_moving_avgs[i] = times_to_tx[:, (i-window_size):i] |> mean
             end
         end
@@ -216,14 +223,20 @@ end
 
 # construct and simulate 100 virtual transmitters for each preference model
 # optimistic initialization (i.e., the value function approximator begins as all ones)
-transmitters₁ = [VirtualTransmitter(pref_model₁, ones(STATE_SIZE..., 10000)) for i ∈ 1:100];
-plt₁ = plot_sim_results(transmitters₁)
-savefig(plt₁, "pref_model1.png")
+transmitters₁ = [VirtualTransmitter(pref_model₁, ones(STATE_SIZE..., 5000)) for i ∈ 1:100];
+bkt_plt₁ = plot_sim_results(transmitters₁, noise_mode="BUCKET")
+savefig(bkt_plt₁, "bkt_noise_pref_model1.png")
+rand_plt₁ = plot_sim_results(transmitters₁, noise_mode="RANDOM")
+savefig(rand_plt₁, "rand_noise_pref_model1.png")
 
-transmitters₂ = [VirtualTransmitter(pref_model₂, ones(STATE_SIZE..., 10000)) for i ∈ 1:100];
-plt₂ = plot_sim_results(transmitters₂)
-savefig(plt₂, "pref_model2.png")
+transmitters₂ = [VirtualTransmitter(pref_model₂, ones(STATE_SIZE..., 5000)) for i ∈ 1:100];
+bkt_plt₂ = plot_sim_results(transmitters₂, noise_mode="BUCKET")
+savefig(bkt_plt₂, "bkt_noise_pref_model2.png")
+rand_plt₂ = plot_sim_results(transmitters₂, noise_mode="RANDOM")
+savefig(rand_plt₂, "rand_noise_pref_model2.png")
 
-transmitters₃ = [VirtualTransmitter(pref_model₃, ones(STATE_SIZE..., 10000)) for i ∈ 1:100];
-plt₃ = plot_sim_results(transmitters₃)
-savefig(plt₃, "pref_model3.png")
+transmitters₃ = [VirtualTransmitter(pref_model₃, ones(STATE_SIZE..., 5000)) for i ∈ 1:100];
+bkt_plt₃ = plot_sim_results(transmitters₃, noise_mode="BUCKET")
+savefig(bkt_plt₃, "bkt_noise_pref_model3.png")
+rand_plt₃ = plot_sim_results(transmitters₃, noise_mode="RANDOM")
+savefig(rand_plt₃, "rand_noise_pref_model3.png")
