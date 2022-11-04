@@ -4,15 +4,15 @@ GLMakie.activate!()
 using CairoMakie
 CairoMakie.activate!()
 
+const P_sl = 550e-6 # 550 μW
+const P_gps = 230e-3 # 230 mW
+const P_rx = 130e-3 # 130 mW
+const E_tx = 12.24 # 12.24 J
+const t_gps = 30 # 30 s
+const f_pkt = 1 / 10_800 # 1 / 3 hr⁻¹ = 1 / 10,800 Hz
+
 "Calculates E_attempt, the average total energy for an attempted transmission to satellite."
 function energy(f_attempt, r_success, ϵ_pass, t_pass)
-    P_sl = 550e-6 # 550 μW
-    P_gps = 230e-3 # 230 mW
-    P_rx = 130e-3 # 130 mW
-    E_tx = 12.24 # 12.24 J
-    t_gps = 30 # 30 s
-    f_pkt = 1 / 10_800 # 1 / 3 hr⁻¹ = 1 / 10,800 Hz
-
     E_success = (P_sl * (1 / f_attempt)) + (P_gps * t_gps) + (ϵ_pass * P_rx * t_pass) + (E_tx * (f_pkt / (r_success * f_attempt)))
     E_fail = (P_sl * (1 / f_attempt)) + (P_gps * t_gps) + (P_rx * t_pass)
     E_attempt = (r_success * E_success) + ((1 - r_success) * E_fail)
@@ -22,7 +22,8 @@ end
 
 "Calculates P_avg, the average power consumption of the modem during operation."
 function power(f_attempt, r_success, ϵ_pass, t_pass)
-    return energy(f_attempt, r_success, ϵ_pass, t_pass) * f_attempt
+    t_elapsed = (1 / f_attempt) + t_gps + (r_success * ϵ_pass * t_pass) + ((1 - r_success) * t_pass)
+    return energy(f_attempt, r_success, ϵ_pass, t_pass) / t_elapsed
 end
 
 f_attempt = LinRange(1, 48, 100) # 1 per hour to 1 per 48 hours
@@ -46,5 +47,9 @@ Label(fig[0, :], "Average Power Consumption (W)", textsize = 40)
 
 save("avg_power.png", fig)
 
-energy(1 / (24*3600), 1, 1, 25*60)
-energy(1 / (24*3600), 0.1, 1, 25*60)
+power(1 / (24*3600), 0.13, 0.5, 25*60)
+power(1 / (24*3600), 0.20, 0.5, 25*60)
+power(1 / (24*3600), 0.42, 0.5, 25*60)
+power(1 / (24*3600), 0.57, 0.5, 25*60)
+power(1 / (24*3600), 0.78, 0.5, 25*60)
+power(1 / (24*3600), 0.85, 0.5, 25*60)
