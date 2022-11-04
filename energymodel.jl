@@ -25,22 +25,26 @@ function power(f_attempt, r_success, ϵ_pass, t_pass)
     return energy(f_attempt, r_success, ϵ_pass, t_pass) * f_attempt
 end
 
-f_attempt = LinRange(1 / 3_600, 1 / 172_800, 100) # 1 per hour to 1 per 48 hours
-r_success = LinRange(0.0, 1.0, 100)
-ϵ_pass = LinRange(1.0, 0.0, 2)
-t_pass = LinRange(3600.0, 600.0, 3) # 60 min to 10 min
+f_attempt = LinRange(1, 48, 100) # 1 per hour to 1 per 48 hours
+r_success = LinRange(0.01, 1, 100)
+ϵ_pass = LinRange(0, 1, 2)
+t_pass = LinRange(10, 60, 3) # 60 min to 10 min
 
-fig = Figure(resolution = (1600, 2400), fontsize = 14)
+fig = Figure(resolution = (1600, 2400), fontsize = 20)
 for (i, ϵ) ∈ enumerate(ϵ_pass)
     for (j, t) ∈ enumerate(t_pass)
-        # TODO: latex-ify
         ax = Axis3(fig[j, i], aspect=(1,1,1),
-            title="ϵ_pass = $(ϵ)\nt_pass = $(t)",
+            title=L"\epsilon_{pass}=%$(ϵ), t_{pass}=%$(t) (min)",
             perspectiveness=0.0,
-            xlabel="f_attempt",
-            ylabel="r_success",
-            zlabel="P_avg")
-        P_avg = [power(f, r, ϵ, t) for f ∈ f_attempt, r ∈ r_success]
+            xlabel="Average time between attempts (hr)",
+            ylabel="Average success rate")
+        P_avg = [power(1 / (f * 3600), r, ϵ, t * 60) for f ∈ f_attempt, r ∈ r_success]
         surface!(ax, f_attempt, r_success, P_avg)
     end
 end
+Label(fig[0, :], "Average Power Consumption (W)", textsize = 40)
+
+save("avg_power.png", fig)
+
+energy(1 / (24*3600), 1, 1, 25*60)
+energy(1 / (24*3600), 0.1, 1, 25*60)
