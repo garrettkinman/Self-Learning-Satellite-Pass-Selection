@@ -179,7 +179,6 @@ end
 
 "Run simulations for a set of virtual transmitters for several values of discount factors, then plots out moving average and average time to TX"
 function plot_sim_results(transmitters::AbstractVector{VirtualTransmitter}; n_epochs=5000, λs=[0.9,0.95,0.99], noise_mode="BUCKET")
-    # TODO
     n_tx = length(transmitters)
 
     baseline_results = baseline(transmitters, n_epochs=n_epochs, noise_mode=noise_mode)
