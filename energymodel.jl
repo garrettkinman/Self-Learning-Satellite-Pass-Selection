@@ -47,9 +47,17 @@ Label(fig[0, :], "Average Power Consumption (W)", textsize = 40)
 
 save("avg_power.png", fig)
 
+# pref model 1
 power(1 / (0.39*3600), 0.13, 0.5, 25*60) |> println
+power(1 / (24*3600), 0.13, 0.5, 25*60) |> println
 power(1 / (24*3600), 0.20, 0.5, 25*60) |> println
+
+# pref model 2
 power(1 / (1.26*3600), 0.42, 0.5, 25*60) |> println
+power(1 / (23*3600), 0.42, 0.5, 25*60) |> println
 power(1 / (23*3600), 0.57, 0.5, 25*60) |> println
+
+# pref model 3
 power(1 / (2.34*3600), 0.78, 0.5, 25*60) |> println
+power(1 / (22*3600), 0.78, 0.5, 25*60) |> println
 power(1 / (22*3600), 0.85, 0.5, 25*60) |> println
