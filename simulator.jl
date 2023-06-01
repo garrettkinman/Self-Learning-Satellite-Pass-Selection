@@ -176,6 +176,8 @@ function baseline(transmitters::AbstractVector{VirtualTransmitter}; n_epochs=100
     return results
 end
 
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 "Run simulations for a set of virtual transmitters for several values of discount factors, then plots out moving average and average time to TX"
 function plot_sim_results(transmitters::AbstractVector{VirtualTransmitter}; n_epochs=5000, λs=[0.9,0.95,0.99], noise_mode="BUCKET")
     n_tx = length(transmitters)
@@ -219,30 +221,12 @@ function plot_sim_results(transmitters::AbstractVector{VirtualTransmitter}; n_ep
     return plot(results_plt, time_to_tx_plt, layout = (2, 1))
 end
 
-# construct and simulate 100 virtual transmitters for each preference model
-# optimistic initialization (i.e., the value function approximator begins as all ones)
-transmitters₁ = [VirtualTransmitter(pref_model₁, ones(STATE_SIZE..., 5000)) for i ∈ 1:100];
-bkt_plt₁ = plot_sim_results(transmitters₁, noise_mode="BUCKET")
-savefig(bkt_plt₁, "bkt_noise_pref_model1.png")
-rand_plt₁ = plot_sim_results(transmitters₁, noise_mode="RANDOM")
-savefig(rand_plt₁, "rand_noise_pref_model1.png")
-
-transmitters₂ = [VirtualTransmitter(pref_model₂, ones(STATE_SIZE..., 5000)) for i ∈ 1:100];
-bkt_plt₂ = plot_sim_results(transmitters₂, noise_mode="BUCKET")
-savefig(bkt_plt₂, "bkt_noise_pref_model2.png")
-rand_plt₂ = plot_sim_results(transmitters₂, noise_mode="RANDOM")
-savefig(rand_plt₂, "rand_noise_pref_model2.png")
-
-transmitters₃ = [VirtualTransmitter(pref_model₃, ones(STATE_SIZE..., 5000)) for i ∈ 1:100];
-bkt_plt₃ = plot_sim_results(transmitters₃, noise_mode="BUCKET")
-savefig(bkt_plt₃, "bkt_noise_pref_model3.png")
-rand_plt₃ = plot_sim_results(transmitters₃, noise_mode="RANDOM")
-savefig(rand_plt₃, "rand_noise_pref_model3.png")
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # construct and simulate 100 virtual transmitters for preference model 2
 # optimistic initialization (i.e., the value function approximator begins as all ones)
 "Run simulations for a set of virtual transmitters for several values of discount factors, then plot out moving average vs discount factor λ"
-function plot_λ_tradeoffs(transmitters::AbstractVector{VirtualTransmitter}; n_epochs=5000, λs=0.0:0.01:1.0, noise_mode="BUCKET")
+function get_λ_tradeoffs(transmitters::AbstractVector{VirtualTransmitter}; n_epochs=5000, λs=0.0:0.01:1.0, noise_mode="BUCKET")
     n_tx = length(transmitters)
 
     # size of the moving window for moving averages
@@ -272,27 +256,5 @@ function plot_λ_tradeoffs(transmitters::AbstractVector{VirtualTransmitter}; n_e
         push!(stable_times_to_tx, times_moving_avgs[end])
     end
 
-    results_plt = scatter(λs, stable_sim_results, label=false)
-    title!(results_plt, "Average TX Success Rate vs Discount Factor λ")
-    xlabel!(results_plt, "Discount Factor λ")
-    ylabel!(results_plt, "TX Success Rate")
-    xticks!(0.0:0.05:1.0)
-
-    time_to_tx_plt = scatter(λs, stable_times_to_tx, label=false)
-    title!(time_to_tx_plt, "Average Time to TX vs Discount Factor λ")
-    xlabel!(time_to_tx_plt, "Discount Factor λ")
-    ylabel!(time_to_tx_plt, "Mean Time to TX (hours)")
-    xticks!(0.0:0.05:1.0)
-
-    return results_plt, time_to_tx_plt
+    return stable_sim_results, stable_times_to_tx
 end
-
-transmitters = [VirtualTransmitter(pref_model₂, ones(STATE_SIZE..., 5000)) for i ∈ 1:100];
-λs = @pipe Vector(0.0:0.02:0.74) |> append!(_, Vector(0.75:0.01:0.85), Vector(0.855:0.005:1.0)) # want higher precision around 0.9 to 1.0
-results_plt, time_to_tx_plt = plot_λ_tradeoffs(transmitters, λs=λs, noise_mode="BUCKET")
-
-results_plt
-time_to_tx_plt
-
-combined_plt = plot(results_plt, time_to_tx_plt, layout = (2, 1))
-savefig(combined_plt, "lambda_tradeoffs.png")
