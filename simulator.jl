@@ -4,7 +4,6 @@ using Logging
 using ProgressLogging
 using StatsBase
 
-
 "Convert continuous-valued state into discrete states using bucketing"
 function discretize(angle::AbstractFloat, duration::AbstractFloat, noise::Integer)
     angle_bucket = 0
@@ -177,6 +176,8 @@ function baseline(transmitters::AbstractVector{VirtualTransmitter}; n_epochs=100
     return results
 end
 
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 "Run simulations for a set of virtual transmitters for several values of discount factors, then plots out moving average and average time to TX"
 function plot_sim_results(transmitters::AbstractVector{VirtualTransmitter}; n_epochs=5000, λs=[0.9,0.95,0.99], noise_mode="BUCKET")
     n_tx = length(transmitters)
@@ -220,22 +221,40 @@ function plot_sim_results(transmitters::AbstractVector{VirtualTransmitter}; n_ep
     return plot(results_plt, time_to_tx_plt, layout = (2, 1))
 end
 
-# construct and simulate 100 virtual transmitters for each preference model
+## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# construct and simulate 100 virtual transmitters for preference model 2
 # optimistic initialization (i.e., the value function approximator begins as all ones)
-transmitters₁ = [VirtualTransmitter(pref_model₁, ones(STATE_SIZE..., 5000)) for i ∈ 1:100];
-bkt_plt₁ = plot_sim_results(transmitters₁, noise_mode="BUCKET")
-savefig(bkt_plt₁, "bkt_noise_pref_model1.png")
-rand_plt₁ = plot_sim_results(transmitters₁, noise_mode="RANDOM")
-savefig(rand_plt₁, "rand_noise_pref_model1.png")
+"Run simulations for a set of virtual transmitters for several values of discount factors, then plot out moving average vs discount factor λ"
+function get_λ_tradeoffs(transmitters::AbstractVector{VirtualTransmitter}; n_epochs=5000, λs=0.0:0.01:1.0, noise_mode="BUCKET")
+    n_tx = length(transmitters)
 
-transmitters₂ = [VirtualTransmitter(pref_model₂, ones(STATE_SIZE..., 5000)) for i ∈ 1:100];
-bkt_plt₂ = plot_sim_results(transmitters₂, noise_mode="BUCKET")
-savefig(bkt_plt₂, "bkt_noise_pref_model2.png")
-rand_plt₂ = plot_sim_results(transmitters₂, noise_mode="RANDOM")
-savefig(rand_plt₂, "rand_noise_pref_model2.png")
+    # size of the moving window for moving averages
+    window_size = 1000
 
-transmitters₃ = [VirtualTransmitter(pref_model₃, ones(STATE_SIZE..., 5000)) for i ∈ 1:100];
-bkt_plt₃ = plot_sim_results(transmitters₃, noise_mode="BUCKET")
-savefig(bkt_plt₃, "bkt_noise_pref_model3.png")
-rand_plt₃ = plot_sim_results(transmitters₃, noise_mode="RANDOM")
-savefig(rand_plt₃, "rand_noise_pref_model3.png")
+    stable_sim_results = []
+    stable_times_to_tx = []
+    for λᵢ ∈ λs
+        @info "Simulating λ = $(λᵢ)..."
+        
+        sim_results, times_to_tx = simulate!(transmitters, n_epochs=n_epochs, λ=λᵢ, noise_mode=noise_mode)
+            
+        results_moving_avgs = zeros(n_epochs)
+        times_moving_avgs = zeros(n_epochs)
+        for i ∈ 1:n_epochs
+            if i <= window_size
+                results_moving_avgs[i] = sim_results[:, 1:i] |> mean
+                times_moving_avgs[i] = times_to_tx[:, 1:i] |> mean
+            else
+                results_moving_avgs[i] = sim_results[:, (i-window_size):i] |> mean
+                times_moving_avgs[i] = times_to_tx[:, (i-window_size):i] |> mean
+            end
+        end
+
+        # record the last moving average of the sim results and time to tx, as this represents a fairly "stable" view 
+        push!(stable_sim_results, results_moving_avgs[end])
+        push!(stable_times_to_tx, times_moving_avgs[end])
+    end
+
+    return stable_sim_results, stable_times_to_tx
+end
