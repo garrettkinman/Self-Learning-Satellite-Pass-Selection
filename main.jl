@@ -76,22 +76,25 @@ p_success = LinRange(0.01, 1, 100)
 ϵ_pass = LinRange(0, 1, 2)
 t_pass = LinRange(10, 60, 3) # 60 min to 10 min
 
-fig = Figure(resolution = (1600, 2400), fontsize = 20)
+fig = Figure(resolution = (1600, 2400), fontsize = 25)
 for (i, ϵ) ∈ enumerate(ϵ_pass)
     for (j, t) ∈ enumerate(t_pass)
         ax = Axis3(fig[j, i], aspect=(1,1,1),
             title=L"\epsilon_{pass}=%$(ϵ), t_{pass}=%$(t) (min)",
-            titlesize=30,
+            titlesize=40,
             perspectiveness=0.0,
             xlabel="Average time between attempts (hr)",
             ylabel="Probability of TX success",
             zlabel="Average power (W)",
-            zlabeloffset=100)
+            zlabeloffset=100,
+            protrusions=50)
         P_avg = [power(1 / (f * 3600), r, ϵ, t * 60) for f ∈ r_attempt, r ∈ p_success]
-        surface!(ax, r_attempt, p_success, P_avg)
+        CairoMakie.surface!(ax, r_attempt, p_success, P_avg)
     end
 end
 Label(fig[0, :], "Average Power (W)", fontsize = 40)
+
+fig
 
 save("avg_power.png", fig)
 

@@ -188,16 +188,16 @@ function plot_sim_results(transmitters::AbstractVector{VirtualTransmitter}; n_ep
     window_size = 1000
 
     # create success rate plot
-    results_plt = hline([baseline_results |> mean], label="baseline")
-    title!(results_plt, "Moving Average TX Success Rate (window = $(window_size))")
-    xlabel!(results_plt, "Epoch")
-    ylabel!(results_plt, "TX Success Rate")
+    results_plt = Plots.hline([baseline_results |> mean], label="baseline")
+    Plots.title!(results_plt, "Moving Average TX Success Rate (window = $(window_size))")
+    Plots.xlabel!(results_plt, "Epoch")
+    Plots.ylabel!(results_plt, "TX Success Rate")
 
     # create average time to tx plot
-    time_to_tx_plt = plot()
-    title!(time_to_tx_plt, "Moving Average Time to TX (window = $(window_size))")
-    xlabel!(time_to_tx_plt, "Epoch")
-    ylabel!(time_to_tx_plt, "Mean Time to TX (hours)")
+    time_to_tx_plt = Plots.plot()
+    Plots.title!(time_to_tx_plt, "Moving Average Time to TX (window = $(window_size))")
+    Plots.xlabel!(time_to_tx_plt, "Epoch")
+    Plots.ylabel!(time_to_tx_plt, "Mean Time to TX (hours)")
 
     for λᵢ ∈ λs
         sim_results, times_to_tx = simulate!(transmitters, n_epochs=n_epochs, λ=λᵢ, noise_mode=noise_mode)
@@ -214,11 +214,11 @@ function plot_sim_results(transmitters::AbstractVector{VirtualTransmitter}; n_ep
             end
         end
 
-        plot!(results_plt, results_moving_avgs, label="λ = $(λᵢ)")
-        plot!(time_to_tx_plt, times_moving_avgs, label="λ = $(λᵢ)")
+        Plots.plot!(results_plt, results_moving_avgs, label="λ = $(λᵢ)")
+        Plots.plot!(time_to_tx_plt, times_moving_avgs, label="λ = $(λᵢ)")
     end
 
-    return plot(results_plt, time_to_tx_plt, layout = (2, 1))
+    return Plots.plot(results_plt, time_to_tx_plt, layout = (2, 1), size=(650,700))
 end
 
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
